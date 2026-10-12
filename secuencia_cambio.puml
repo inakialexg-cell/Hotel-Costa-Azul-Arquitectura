@@ -1,0 +1,82 @@
+@startuml Secuencia_CambioHabitacion
+autonumber
+
+' === ESTILOS Y COLORES ===
+skinparam actor {
+    BackgroundColor #FFF3E0
+    BorderColor #F57C00
+}
+skinparam participant {
+    BackgroundColor #FFE0B2
+    BorderColor #E65100
+}
+skinparam note {
+    BackgroundColor #EDE7F6
+    BorderColor #512DA8
+}
+skinparam sequence {
+    ArrowColor #BF360C
+    LifeLineBorderColor #F57C00
+    LifeLineBackgroundColor #FFE0B2
+}
+
+actor "Recepción" as Recepcionista
+participant "EstanciasAppService" as AppService
+participant "EstanciaRepository" as EstanciaRepo
+participant "HabitacionRepository" as HabRepo
+participant "ServicioAsignacionHabitacion" as AsignacionService
+participant "Estancia" as EstanciaDomain
+participant "Habitacion (Origen)" as HabOrigen #FFCCBC
+participant "Habitacion (Destino)" as HabDestino #C8E6C9
+participant "UnitOfWork" as UOW
+participant "EventBus" as Bus
+
+Recepcionista -> AppService: cambiarHabitacion(idEstancia, tipoNuevo, motivo, idEmpleado)
+activate AppService #FFD180
+
+AppService -> EstanciaRepo: findById(idEstancia)
+activate EstanciaRepo
+EstanciaRepo --> AppService: estancia
+deactivate EstanciaRepo
+
+AppService -> AsignacionService: seleccionarHabitacionDisponible(tipoNuevo)
+activate AsignacionService
+AsignacionService --> AppService: habitacionDestino
+deactivate AsignacionService
+
+AppService -> HabRepo: findById(estancia.idHabitacionActual)
+activate HabRepo
+HabRepo --> AppService: habitacionOrigen
+deactivate HabRepo
+
+AppService -> EstanciaDomain: cambiarHabitacion(habitacionDestino, motivo, empleado)
+activate EstanciaDomain
+note over EstanciaDomain: Agrega entidad CambioHabitacion\ncon marca de tiempo y auditoría (R9)
+EstanciaDomain --> AppService: ok
+deactivate EstanciaDomain
+
+AppService -> HabOrigen: liberar()
+activate HabOrigen
+note over HabOrigen: Pasa a estado SUCIA
+HabOrigen --> AppService: ok
+deactivate HabOrigen
+
+AppService -> HabDestino: asignar()
+activate HabDestino
+note over HabDestino: Pasa a estado OCUPADA
+HabDestino --> AppService: ok
+deactivate HabDestino
+
+AppService -> UOW: commit(estancia, habitacionOrigen, habitacionDestino)
+activate UOW
+UOW --> AppService: ok
+deactivate UOW
+
+AppService -> Bus: publish(CambioHabitacionRegistradoEvent)
+activate Bus
+Bus --> AppService: ok
+deactivate Bus
+
+AppService --> Recepcionista: Cambio de Habitación Registrado
+deactivate AppService
+@enduml

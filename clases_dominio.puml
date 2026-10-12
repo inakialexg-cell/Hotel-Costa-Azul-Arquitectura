@@ -1,0 +1,135 @@
+@startuml HotelCostaAzul_DomainModel
+skinparam classAttributeIconSize 0
+skinparam style strictuml
+
+package "Aggregate: Reserva" {
+    class Reserva << (A, #FFD700) Aggregate Root >> {
+        - idReserva: String
+        - fechaLlegada: Date
+        - fechaSalida: Date
+        - numeroHuespedes: int
+        - tipoHabitacion: TipoHabitacion
+        - estado: EstadoReserva
+        + confirmar()
+        + cancelar()
+        + registrarNoShow()
+    }
+}
+
+package "Aggregate: Estancia" {
+    class Estancia << (A, #FFD700) Aggregate Root >> {
+        - idEstancia: String
+        - idReserva: String
+        - idHabitacion: String
+        - idCuenta: String
+        - fechaCheckIn: DateTime
+        - fechaCheckOutProgramada: DateTime
+        - estado: EstadoEstancia
+        + realizarCheckIn(identidad: IdentidadVerificada, garantia: Garantia)
+        + cambiarHabitacion(destino: Habitacion, motivo: String, usuario: Empleado)
+        + extenderEstancia(diasExtra: int)
+        + procesarSalidaAnticipada()
+        + realizarCheckOut()
+    }
+
+    class CambioHabitacion << Entity >> {
+        - idCambio: String
+        - habitacionOrigen: String
+        - habitacionDestino: String
+        - motivo: String
+        - fechaHora: DateTime
+        - usuarioResponsable: String
+    }
+
+    Estancia "1" *-- "0..*" CambioHabitacion
+}
+
+package "Aggregate: Habitación" {
+    class Habitacion << (A, #FFD700) Aggregate Root >> {
+        - numeroHabitacion: String
+        - tipoHabitacion: TipoHabitacion
+        - estado: EstadoHabitacion
+        + asignar()
+        + liberar()
+        + marcarLimpia(empleado: Empleado)
+        + marcarFueraDeServicio(motivo: String, autorizante: Empleado)
+    }
+
+    class RegistroLimpieza << Entity >> {
+        - idRegistro: String
+        - fechaHora: DateTime
+        - usuarioLimpieza: String
+    }
+
+    Habitacion "1" *-- "0..*" RegistroLimpieza
+}
+
+package "Aggregate: Cuenta (Folio)" {
+    class Cuenta << (A, #FFD700) Aggregate Root >> {
+        - idCuenta: String
+        - idEstancia: String
+        - saldoTotal: BigDecimal
+        - estado: EstadoCuenta
+        + registrarConsumo(consumo: ConsumoAdicional)
+        + consolidarYLiquidar()
+    }
+
+    class ConsumoAdicional << Entity >> {
+        - idConsumo: String
+        - origen: OrigenCargo
+        - concepto: String
+        - monto: BigDecimal
+        - fechaHora: DateTime
+        - usuarioRegistro: String
+    }
+
+    Cuenta "1" *-- "0..*" ConsumoAdicional
+}
+
+package "Aggregate: Huésped" {
+    class Huesped << (A, #FFD700) Aggregate Root >> {
+        - idHuesped: String
+        - nombreCompleto: String
+        - documentoIdentidad: String
+        - email: String
+    }
+}
+
+package "Aggregate: Tarifa" {
+    class Tarifa << (A, #FFD700) Aggregate Root >> {
+        - idTarifa: String
+        - temporada: Temporada
+        - tipoHabitacion: TipoHabitacion
+        - condicionComercial: String
+        - precioPorNoche: BigDecimal
+    }
+}
+
+package "Aggregate: Empleado" {
+    class Empleado << (A, #FFD700) Aggregate Root >> {
+        - idEmpleado: String
+        - nombre: String
+        - rol: RolEmpleado
+    }
+}
+
+package "Domain Services" {
+    class ServicioDisponibilidad << Domain Service >> {
+        + calcularDisponibilidad(fechas: RangoFechas, tipo: TipoHabitacion): int
+    }
+
+    class ServicioTarificacion << Domain Service >> {
+        + calcularTarifa(fechas: RangoFechas, tipo: TipoHabitacion, condicion: String): BigDecimal
+    }
+
+    class ServicioAsignacionHabitacion << Domain Service >> {
+        + seleccionarHabitacionDisponible(tipo: TipoHabitacion): Habitacion
+    }
+}
+
+Estancia ..> Reserva : "referencia por idReserva"
+Estancia ..> Habitacion : "referencia por idHabitacion"
+Estancia ..> Cuenta : "referencia por idCuenta"
+Reserva ..> Huesped : "solicitada por idHuesped"
+
+@enduml

@@ -1,0 +1,75 @@
+@startuml Secuencia_CheckIn
+autonumber
+
+' === ESTILOS Y COLORES ===
+skinparam actor {
+    BackgroundColor #E1F5FE
+    BorderColor #0288D1
+}
+skinparam participant {
+    BackgroundColor #E0F2FE
+    BorderColor #0288D1
+}
+skinparam note {
+    BackgroundColor #FFF9C4
+    BorderColor #FBC02D
+}
+skinparam sequence {
+    ArrowColor #01579B
+    LifeLineBorderColor #0288D1
+    LifeLineBackgroundColor #E0F2FE
+}
+
+actor "Recepción" as Recepcionista
+participant "EstanciasAppService" as AppService
+participant "ReservaRepository" as ReservaRepo
+participant "ServicioAsignacionHabitacion" as AsignacionService
+participant "Estancia" as EstanciaDomain
+participant "Habitacion" as HabDomain
+participant "Cuenta" as CuentaDomain
+participant "UnitOfWork" as UOW
+participant "EventBus" as Bus
+
+Recepcionista -> AppService: realizarCheckIn(idReserva, identidad, garantia, idEmpleado)
+activate AppService #B3E5FC
+
+AppService -> ReservaRepo: findById(idReserva)
+activate ReservaRepo
+ReservaRepo --> AppService: reserva
+deactivate ReservaRepo
+
+AppService -> AsignacionService: seleccionarHabitacionDisponible(reserva.tipoHabitacion)
+activate AsignacionService
+AsignacionService --> AppService: habitacionDisponible
+deactivate AsignacionService
+
+AppService -> EstanciaDomain: crear(reserva, identidad, garantia)
+activate EstanciaDomain
+note over EstanciaDomain: Valida IdentidadVerificada\ny Garantia (R3)
+EstanciaDomain --> AppService: estanciaCreada
+deactivate EstanciaDomain
+
+AppService -> HabDomain: asignar()
+activate HabDomain
+note over HabDomain: Transiciona estado a OCUPADA (R4)
+HabDomain --> AppService: ok
+deactivate HabDomain
+
+AppService -> CuentaDomain: abrirParaEstancia(estanciaCreada.id)
+activate CuentaDomain
+CuentaDomain --> AppService: cuentaNueva
+deactivate CuentaDomain
+
+AppService -> UOW: commit(estanciaCreada, habitacionDisponible, cuentaNueva)
+activate UOW
+UOW --> AppService: ok
+deactivate UOW
+
+AppService -> Bus: publish(CheckInRealizadoEvent)
+activate Bus
+Bus --> AppService: ok
+deactivate Bus
+
+AppService --> Recepcionista: Check-in Exitoso
+deactivate AppService
+@enduml
