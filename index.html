@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hotel Costa Azul - Sistema de Gestión Domain-Driven Design</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        ocean: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0288d1',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                            950: '#082f49',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar for Event Log & Room Grid */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #0284c7;
+        }
+        .glow-effect {
+            box-shadow: 0 0 15px rgba(2, 132, 199, 0.25);
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans antialiased bg-slate-950 text-slate-100 overflow-x-hidden">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-3 max-w-sm w-full pointer-events-none"></div>
+
+    <!-- Navigation / Header -->
+    <header class="bg-slate-900/90 backdrop-blur border-b border-slate-800 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo & Brand -->
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-ocean-500 flex items-center justify-center text-white shadow-lg glow-effect">
+                        <i class="fa-solid fa-water-ladder text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-lg tracking-tight text-white">Hotel Costa Azul</span>
+                            <span class="text-xs bg-ocean-950 text-cyan-400 border border-cyan-800/50 px-2 py-0.5 rounded-full font-mono">DDD Core 1.0</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Sistema Integrado de Dominio & Eventos</p>
+                    </div>
+                </div>
+
+                <!-- Navigation Tabs -->
+                <nav class="hidden md:flex space-x-1">
+                    <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-btn active px-3 py-2 rounded-lg text-sm font-medium transition-all bg-ocean-600 text-white shadow">
+                        <i class="fa-solid fa-chart-pie mr-2"></i>Dashboard
+                    </button>
+                    <button onclick="switchTab('checkin')" id="nav-checkin" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-all">
+                        <i class="fa-solid fa-key mr-2"></i>Check-In (CU2)
+                    </button>
+                    <button onclick="switchTab('cambio')" id="nav-cambio" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-all">
+                        <i class="fa-solid fa-arrow-right-arrow-left mr-2"></i>Cambio Habitación (CU4)
+                    </button>
+                    <button onclick="switchTab('habitaciones')" id="nav-habitaciones" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-all">
+                        <i class="fa-solid fa-hotel mr-2"></i>Matriz 120 Hab.
+                    </button>
+                    <button onclick="switchTab('eventos')" id="nav-eventos" class="nav-btn px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-all relative">
+                        <i class="fa-solid fa-bolt text-amber-400 mr-2"></i>EventBus Log
+                        <span id="event-badge" class="ml-1.5 px-1.5 py-0.5 text-xs font-mono bg-amber-500/20 text-amber-300 rounded-full border border-amber-500/30">0</span>
+                    </button>
+                </nav>
+
+                <!-- Status indicator -->
+                <div class="flex items-center space-x-3">
+                    <div class="flex items-center space-x-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-mono">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span class="text-slate-300">UnitOfWork: OK</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- TAB 1: DASHBOARD -->
+        <section id="tab-dashboard" class="space-y-6">
+            <!-- KPI Metric Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Habitaciones Libres</p>
+                        <h3 id="kpi-disponibles" class="text-2xl font-bold text-emerald-400 mt-1">--</h3>
+                        <p class="text-xs text-slate-500 mt-1">Listas para asignación</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-xl">
+                        <i class="fa-solid fa-door-open"></i>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Habitaciones Ocupadas</p>
+                        <h3 id="kpi-ocupadas" class="text-2xl font-bold text-sky-400 mt-1">--</h3>
+                        <p class="text-xs text-slate-500 mt-1">Con estancia activa</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 text-xl">
+                        <i class="fa-solid fa-bed"></i>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Sucias / Limpieza</p>
+                        <h3 id="kpi-sucias" class="text-2xl font-bold text-amber-400 mt-1">--</h3>
+                        <p class="text-xs text-slate-500 mt-1">Requieren mantenimiento</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-xl">
+                        <i class="fa-solid fa-broom"></i>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Ocupación General</p>
+                        <h3 id="kpi-porcentaje" class="text-2xl font-bold text-cyan-400 mt-1">--%</h3>
+                        <p class="text-xs text-slate-500 mt-1">Total: 120 habitaciones</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-xl">
+                        <i class="fa-solid fa-chart-line"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions & Recent Activity Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Architecture DDD Summary -->
+                <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-6">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">Estado de la Arquitectura de Dominio (DDD)</h2>
+                            <p class="text-xs text-slate-400">Patrón de Aggregates, Reglas de Negocio Cruzadas & Trazabilidad</p>
+                        </div>
+                        <span class="px-2.5 py-1 rounded-md text-xs font-mono bg-cyan-950 text-cyan-400 border border-cyan-800">7 Aggregates</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-slate-950/70 p-4 rounded-lg border border-slate-800">
+                            <div class="flex items-center space-x-2 text-cyan-400 font-semibold mb-2 text-sm">
+                                <i class="fa-solid fa-shield-halved"></i>
+                                <span>Regla R3 (Check-In)</span>
+                            </div>
+                            <p class="text-xs text-slate-400 leading-relaxed">
+                                Exige verificación estricta de Identidad y Garantía de Pago antes de instanciar la <span class="text-slate-200">Estancia</span>.
+                            </p>
+                        </div>
+                        <div class="bg-slate-950/70 p-4 rounded-lg border border-slate-800">
+                            <div class="flex items-center space-x-2 text-amber-400 font-semibold mb-2 text-sm">
+                                <i class="fa-solid fa-rotate"></i>
+                                <span>Regla R4 & R9 (Habitación)</span>
+                            </div>
+                            <p class="text-xs text-slate-400 leading-relaxed">
+                                Transiciones automáticas de estado: Disponible &rarr; Ocupada &rarr; Sucia. Genera historial en entidad <span class="text-slate-200">CambioHabitacion</span>.
+                            </p>
+                        </div>
+                        <div class="bg-slate-950/70 p-4 rounded-lg border border-slate-800">
+                            <div class="flex items-center space-x-2 text-emerald-400 font-semibold mb-2 text-sm">
+                                <i class="fa-solid fa-receipt"></i>
+                                <span>Cuenta & Folio</span>
+                            </div>
+                            <p class="text-xs text-slate-400 leading-relaxed">
+                                Apertura sincronizada de la entidad <span class="text-slate-200">Cuenta</span> para consumo de servicios y cargos de alojamiento.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between">
+                        <span class="text-xs text-slate-400">Acceso rápido a flujos del sistema:</span>
+                        <div class="flex gap-2">
+                            <button onclick="switchTab('checkin')" class="px-3 py-1.5 bg-ocean-600 hover:bg-ocean-500 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5">
+                                <i class="fa-solid fa-plus"></i> Nuevo Check-In
+                            </button>
+                            <button onclick="switchTab('cambio')" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5">
+                                <i class="fa-solid fa-arrows-rotate"></i> Solicitar Cambio
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Events Mini Feed -->
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 flex flex-col">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+                        <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-bolt text-amber-400"></i> Últimos Eventos emitidos
+                        </h3>
+                        <button onclick="switchTab('eventos')" class="text-xs text-cyan-400 hover:underline">Ver todos</button>
+                    </div>
+
+                    <div id="mini-event-feed" class="flex-1 space-y-2 overflow-y-auto max-h-[220px] pr-1">
+                        <!-- Dynamic items -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: CHECK-IN (CU2) -->
+        <section id="tab-checkin" class="hidden space-y-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-3xl mx-auto shadow-2xl">
+                <div class="border-b border-slate-800 pb-4 mb-6">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-lg bg-ocean-600/20 border border-ocean-500/30 flex items-center justify-center text-ocean-400">
+                            <i class="fa-solid fa-id-card text-lg"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-bold text-white">Ejecución del Casos de Uso CU2: Realizar Check-In</h2>
+                            <p class="text-xs text-slate-400">Servicio de Aplicación: <code class="text-cyan-300 font-mono">EstanciasAppService.realizarCheckIn()</code></p>
+                        </div>
+                    </div>
+                </div>
+
+                <form id="checkin-form" onsubmit="handleCheckIn(event)" class="space-y-5">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Reserva Selection -->
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Reserva Confirmada <span class="text-rose-400">*</span></label>
+                            <select id="ci-reserva" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 font-mono" required>
+                                <option value="">-- Seleccionar Reserva --</option>
+                                <option value="RES-1001" data-tipo="SENCILLA" data-huesped="Carlos Mendoza">RES-1001 - Carlos Mendoza (Tipo: SENCILLA)</option>
+                                <option value="RES-1002" data-tipo="DOBLE" data-huesped="Dra. María Elena Ríos">RES-1002 - Dra. María Elena Ríos (Tipo: DOBLE)</option>
+                                <option value="RES-1003" data-tipo="SUITE" data-huesped="Ing. Roberto Gomez">RES-1003 - Ing. Roberto Gomez (Tipo: SUITE)</option>
+                                <option value="RES-1004" data-tipo="SENCILLA" data-huesped="Laura Benítez">RES-1004 - Laura Benítez (Tipo: SENCILLA)</option>
+                            </select>
+                        </div>
+
+                        <!-- ID Empleado Auditor -->
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Empleado Recepción <span class="text-rose-400">*</span></label>
+                            <input type="text" id="ci-empleado" value="EMP-402 (Recepción)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500 font-mono" required readonly>
+                        </div>
+                    </div>
+
+                    <!-- Domain Validations (Rule R3) -->
+                    <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+                        <h4 class="text-xs font-semibold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="fa-solid fa-shield-check"></i> Verificaciones de Regla de Negocio (R3)
+                        </h4>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Identidad -->
+                            <div class="space-y-2">
+                                <label class="block text-xs text-slate-300">Documento Identidad Verificado</label>
+                                <div class="flex items-center space-x-2">
+                                    <input type="checkbox" id="ci-identidad" class="w-4 h-4 rounded text-ocean-600 bg-slate-900 border-slate-700 focus:ring-cyan-500" required>
+                                    <span class="text-xs text-slate-400">INE / Pasaporte físico presentado</span>
+                                </div>
+                                <input type="text" id="ci-doc-num" placeholder="Num. Documento (ej. PAS-882910)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono" required>
+                            </div>
+
+                            <!-- Garantia -->
+                            <div class="space-y-2">
+                                <label class="block text-xs text-slate-300">Garantía de Pago Registrada</label>
+                                <div class="flex items-center space-x-2">
+                                    <input type="checkbox" id="ci-garantia" class="w-4 h-4 rounded text-ocean-600 bg-slate-900 border-slate-700 focus:ring-cyan-500" required>
+                                    <span class="text-xs text-slate-400">Voucher Tarjeta / Depósito pagado</span>
+                                </div>
+                                <input type="text" id="ci-tarjeta" placeholder="Tarjeta Credito (Últimos 4 dígitos)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Habitacion Auto Selection -->
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Habitación Disponible Automática (<code class="text-cyan-400">ServicioAsignacionHabitacion</code>)</label>
+                        <select id="ci-habitacion-destino" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 font-mono font-semibold focus:outline-none" required>
+                            <!-- Auto filled by JS -->
+                        </select>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="pt-2">
+                        <button type="submit" class="w-full py-3 bg-gradient-to-r from-ocean-600 to-cyan-600 hover:from-ocean-500 hover:to-cyan-500 text-white font-semibold rounded-lg shadow-lg glow-effect transition-all flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-circle-check"></i>
+                            <span>Ejecutar Check-In y Abrir Cuenta</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- TAB 3: CAMBIO DE HABITACION (CU4) -->
+        <section id="tab-cambio" class="hidden space-y-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-3xl mx-auto shadow-2xl">
+                <div class="border-b border-slate-800 pb-4 mb-6">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-lg bg-amber-600/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                            <i class="fa-solid fa-arrows-split-up-and-left text-lg"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-bold text-white">Ejecución del Casos de Uso CU4: Cambio de Habitación</h2>
+                            <p class="text-xs text-slate-400">Servicio de Aplicación: <code class="text-amber-300 font-mono">EstanciasAppService.cambiarHabitacion()</code></p>
+                        </div>
+                    </div>
+                </div>
+
+                <form id="cambio-form" onsubmit="handleCambioHabitacion(event)" class="space-y-5">
+                    <!-- Active Stay Selection -->
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1">Seleccionar Estancia Activa <span class="text-rose-400">*</span></label>
+                        <select id="ch-estancia" onchange="updateOrigenDetails()" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-mono" required>
+                            <option value="">-- Seleccionar Estancia En Cursado --</option>
+                            <!-- Dynamic active stays loaded here -->
+                        </select>
+                    </div>
+
+                    <!-- Visual Comparison: Origen (Rojo) vs Destino (Verde) -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Habitation Origen (Red Highlight) -->
+                        <div class="bg-rose-950/30 border border-rose-800/60 rounded-xl p-4">
+                            <div class="flex items-center justify-between text-rose-400 font-semibold text-xs mb-2 uppercase tracking-wider">
+                                <span><i class="fa-solid fa-door-closed mr-1"></i> Habitación Origen</span>
+                                <span class="px-2 py-0.5 rounded bg-rose-900/60 text-rose-200 text-[10px]">Transicionará a SUCIA</span>
+                            </div>
+                            <div class="space-y-1">
+                                <p class="text-sm font-bold text-white" id="origen-num">N/A</p>
+                                <p class="text-xs text-slate-300" id="origen-tipo">Tipo: -</p>
+                                <p class="text-xs text-slate-400" id="origen-huesped">Huésped: -</p>
+                            </div>
+                        </div>
+
+                        <!-- Habitation Destino (Green Highlight) -->
+                        <div class="bg-emerald-950/30 border border-emerald-800/60 rounded-xl p-4">
+                            <div class="flex items-center justify-between text-emerald-400 font-semibold text-xs mb-2 uppercase tracking-wider">
+                                <span><i class="fa-solid fa-door-open mr-1"></i> Habitación Destino</span>
+                                <span class="px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-200 text-[10px]">Transicionará a OCUPADA</span>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-300 mb-1">Nueva Habitación Disponible</label>
+                                <select id="ch-destino-num" class="w-full bg-slate-900 border border-emerald-700/60 rounded-lg px-2.5 py-1.5 text-xs text-emerald-300 font-mono font-semibold focus:outline-none" required>
+                                    <!-- Dynamic options -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Motivo & Auditoria -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Motivo del Cambio (Auditoría R9) <span class="text-rose-400">*</span></label>
+                            <select id="ch-motivo" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500" required>
+                                <option value="Falla Técnica (Aire Acondicionado)">Falla Técnica (Aire Acondicionado)</option>
+                                <option value="Solicitud de Upgrade por Huésped">Solicitud de Upgrade por Huésped</option>
+                                <option value="Mantenimiento de Fontanería">Mantenimiento de Fontanería</option>
+                                <option value="Preferencia de Vista al Mar">Preferencia de Vista al Mar</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">ID Empleado Solicitante</label>
+                            <input type="text" id="ch-empleado" value="EMP-402 (Recepción)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none" required readonly>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="pt-2">
+                        <button type="submit" class="w-full py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold rounded-lg shadow-lg transition-all flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-right-left"></i>
+                            <span>Confirmar Cambio de Habitación (Commit UOW)</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- TAB 4: MATRIZ DE 120 HABITACIONES -->
+        <section id="tab-habitaciones" class="hidden space-y-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-6">
+                    <div>
+                        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-border-all text-cyan-400"></i> Inventario Completo de 120 Habitaciones
+                        </h2>
+                        <p class="text-xs text-slate-400">Visualización en tiempo real del Aggregate Root Habitación y sus estados</p>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="filterRooms('ALL')" id="filter-ALL" class="room-filter-btn px-3 py-1 rounded-lg text-xs font-medium bg-slate-800 text-white border border-slate-700">Todas (120)</button>
+                        <button onclick="filterRooms('DISPONIBLE')" id="filter-DISPONIBLE" class="room-filter-btn px-3 py-1 rounded-lg text-xs font-medium bg-slate-900 text-emerald-400 border border-emerald-800/50 hover:bg-emerald-950">Disponibles</button>
+                        <button onclick="filterRooms('OCUPADA')" id="filter-OCUPADA" class="room-filter-btn px-3 py-1 rounded-lg text-xs font-medium bg-slate-900 text-sky-400 border border-sky-800/50 hover:bg-sky-950">Ocupadas</button>
+                        <button onclick="filterRooms('SUCIA')" id="filter-SUCIA" class="room-filter-btn px-3 py-1 rounded-lg text-xs font-medium bg-slate-900 text-amber-400 border border-amber-800/50 hover:bg-amber-950">Sucias</button>
+                    </div>
+                </div>
+
+                <!-- Legend -->
+                <div class="flex flex-wrap gap-4 text-xs mb-4 p-3 bg-slate-950 rounded-lg border border-slate-800">
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500 inline-block"></span> Disponible</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-sky-500 inline-block"></span> Ocupada</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-500 inline-block"></span> Sucia / Limpieza</span>
+                    <span class="text-slate-500 border-l border-slate-800 pl-4">Clic en una habitación para inspeccionar su estado de dominio.</span>
+                </div>
+
+                <!-- 120 Rooms Grid -->
+                <div id="rooms-grid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-10 lg:grid-cols-12 gap-2 max-h-[500px] overflow-y-auto p-1">
+                    <!-- Dynamic rooms rendered here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 5: EVENTBUS LOG (AUDITORIA) -->
+        <section id="tab-eventos" class="hidden space-y-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-terminal text-amber-400"></i> EventBus Domain Events Log
+                        </h2>
+                        <p class="text-xs text-slate-400">Consola de auditoría de eventos de dominio emitidos en tiempo real por los Agregados</p>
+                    </div>
+                    <button onclick="clearEventLogs()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-mono transition-colors">
+                        <i class="fa-solid fa-trash mr-1"></i> Limpiar Consola
+                    </button>
+                </div>
+
+                <!-- Event Stream Terminal View -->
+                <div class="bg-slate-950 rounded-xl border border-slate-800 p-4 font-mono text-xs overflow-x-auto min-h-[400px]">
+                    <div id="full-event-log" class="space-y-3">
+                        <!-- Events will be appended here -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Room Detail Modal -->
+    <div id="room-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-door-open text-cyan-400"></i>
+                    <span>Habitación <span id="modal-room-num">--</span></span>
+                </h3>
+                <button onclick="closeRoomModal()" class="text-slate-400 hover:text-white text-lg">&times;</button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div class="flex justify-between py-1 border-b border-slate-800">
+                    <span class="text-slate-400">Tipo:</span>
+                    <span id="modal-room-type" class="font-bold text-slate-200">--</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-800">
+                    <span class="text-slate-400">Estado de Dominio:</span>
+                    <span id="modal-room-status" class="font-bold px-2 py-0.5 rounded text-[10px]">--</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-800">
+                    <span class="text-slate-400">Piso / Ubicación:</span>
+                    <span id="modal-room-floor" class="text-slate-200">--</span>
+                </div>
+                <div class="py-1">
+                    <span class="text-slate-400 block mb-1">Estancia Asignada Actual:</span>
+                    <div id="modal-room-stay" class="bg-slate-950 p-2.5 rounded border border-slate-800 text-slate-300 font-mono">
+                        Ninguna estancia activa.
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-2 flex gap-2">
+                <button id="modal-action-btn" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded text-xs transition-colors">
+                    Cerrar Detalle
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* === DOMAIN STATE & INITIALIZATION === */
+        
+        // 120 Rooms Data Array
+        let rooms = [];
+        // Stays Data Array
+        let stays = [];
+        // Domain Events Log Array
+        let domainEvents = [];
+
+        // Initialize 120 rooms with types and statuses
+        function initDomainData() {
+            rooms = [];
+            for (let i = 1; i <= 120; i++) {
+                let floor = Math.floor((i - 1) / 30) + 1;
+                let roomNumber = (floor * 100) + ((i - 1) % 30 + 1);
+                
+                let type = "SENCILLA";
+                if (i > 40 && i <= 90) type = "DOBLE";
+                if (i > 90) type = "SUITE";
+
+                // Seed some initial states for realism
+                let status = "DISPONIBLE";
+                if ([102, 105, 204, 210, 301, 315, 402].includes(roomNumber)) {
+                    status = "OCUPADA";
+                } else if ([108, 212, 304].includes(roomNumber)) {
+                    status = "SUCIA";
+                }
+
+                rooms.push({
+                    id: roomNumber,
+                    number: roomNumber,
+                    type: type,
+                    status: status,
+                    floor: floor
+                });
+            }
+
+            // Seed Initial Stays
+            stays = [
+                {
+                    id: "EST-801",
+                    reservaId: "RES-099",
+                    huesped: "Alejandro Silva",
+                    habitacionNum: 102,
+                    docIdentidad: "PAS-77312",
+                    garantia: "TC-4401",
+                    fechaIn: new Date(Date.now() - 86400000).toLocaleString('es-MX')
+                },
+                {
+                    id: "EST-802",
+                    reservaId: "RES-098",
+                    huesped: "Sofia Martinez",
+                    habitacionNum: 204,
+                    docIdentidad: "INE-192837",
+                    garantia: "TC-9012",
+                    fechaIn: new Date(Date.now() - 43200000).toLocaleString('es-MX')
+                }
+            ];
+
+            // Emit initial system boot domain event
+            emitDomainEvent("SystemDomainInitializedEvent", {
+                totalRooms: 120,
+                activeAggregates: ["Estancia", "Habitacion", "Cuenta", "Reserva", "Huesped"]
+            });
+
+            updateKPIs();
+            renderRoomsGrid();
+            populateActiveStaysSelect();
+            populateAutoRoomsSelect();
+        }
+
+        /* === TAB NAVIGATION LOGIC === */
+        function switchTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('main > section').forEach(sec => sec.classList.add('hidden'));
+            // Remove active style from all nav buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-ocean-600', 'text-white', 'shadow');
+                btn.classList.add('text-slate-300');
+            });
+
+            // Show selected tab
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`nav-${tabId}`);
+            activeBtn.classList.add('bg-ocean-600', 'text-white', 'shadow');
+            activeBtn.classList.remove('text-slate-300');
+
+            if (tabId === 'habitaciones') renderRoomsGrid();
+        }
+
+        /* === KPI UPDATE LOGIC === */
+        function updateKPIs() {
+            const libres = rooms.filter(r => r.status === 'DISPONIBLE').length;
+            const ocupadas = rooms.filter(r => r.status === 'OCUPADA').length;
+            const sucias = rooms.filter(r => r.status === 'SUCIA').length;
+            const porcentaje = Math.round((ocupadas / 120) * 100);
+
+            document.getElementById('kpi-disponibles').textContent = libres;
+            document.getElementById('kpi-ocupadas').textContent = ocupadas;
+            document.getElementById('kpi-sucias').textContent = sucias;
+            document.getElementById('kpi-porcentaje').textContent = `${porcentaje}%`;
+        }
+
+        /* === DOMAIN EVENTS BUS SYSTEM === */
+        function emitDomainEvent(eventName, payload) {
+            const eventObj = {
+                id: 'EVT-' + Math.floor(100000 + Math.random() * 900000),
+                eventName: eventName,
+                timestamp: new Date().toISOString(),
+                formattedTime: new Date().toLocaleTimeString('es-MX'),
+                payload: payload
+            };
+
+            domainEvents.unshift(eventObj);
+
+            // Update Event Badge
+            document.getElementById('event-badge').textContent = domainEvents.length;
+
+            // Render mini feed
+            renderMiniEventFeed();
+            // Render full terminal
+            renderFullEventLog();
+        }
+
+        function renderMiniEventFeed() {
+            const container = document.getElementById('mini-event-feed');
+            container.innerHTML = domainEvents.slice(0, 4).map(evt => `
+                <div class="bg-slate-950 p-2 rounded border border-slate-800/80 text-xs font-mono">
+                    <div class="flex items-center justify-between text-amber-400 font-semibold text-[11px]">
+                        <span><i class="fa-solid fa-bolt text-[10px] mr-1"></i>${evt.eventName}</span>
+                        <span class="text-slate-500 text-[10px]">${evt.formattedTime}</span>
+                    </div>
+                    <div class="text-slate-400 text-[10px] truncate mt-0.5">
+                        ${JSON.stringify(evt.payload)}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderFullEventLog() {
+            const container = document.getElementById('full-event-log');
+            if (domainEvents.length === 0) {
+                container.innerHTML = `<span class="text-slate-500">No hay eventos registrados en la consola.</span>`;
+                return;
+            }
+
+            container.innerHTML = domainEvents.map(evt => `
+                <div class="p-3 bg-slate-900/80 rounded-lg border border-slate-800 space-y-1">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-cyan-400 font-bold"><i class="fa-solid fa-angle-right mr-1"></i>${evt.eventName}</span>
+                        <span class="text-slate-500">${evt.timestamp}</span>
+                    </div>
+                    <div class="text-slate-300 text-xs">
+                        <span class="text-slate-500">EventID:</span> <span class="text-amber-300">${evt.id}</span>
+                    </div>
+                    <pre class="bg-slate-950 p-2 rounded text-[11px] text-emerald-400 overflow-x-auto">${JSON.stringify(evt.payload, null, 2)}</pre>
+                </div>
+            `).join('');
+        }
+
+        function clearEventLogs() {
+            domainEvents = [];
+            document.getElementById('event-badge').textContent = '0';
+            renderMiniEventFeed();
+            renderFullEventLog();
+            showToast('Consola de Eventos limpiada', 'info');
+        }
+
+        /* === CASO DE USO 2: CHECK-IN LOGIC === */
+        function populateAutoRoomsSelect() {
+            const selectReserva = document.getElementById('ci-reserva');
+            const selectRoom = document.getElementById('ci-habitacion-destino');
+            
+            const selectedOption = selectReserva.options[selectReserva.selectedIndex];
+            const tipoRequerido = selectedOption ? selectedOption.getAttribute('data-tipo') : 'SENCILLA';
+
+            const disponibles = rooms.filter(r => r.status === 'DISPONIBLE' && (r.type === tipoRequerido || !tipoRequerido));
+
+            selectRoom.innerHTML = disponibles.map(r => `
+                <option value="${r.number}">Habitación ${r.number} (${r.type} - Piso ${r.floor}) - Estado: DISPONIBLE</option>
+            `).join('');
+
+            if (disponibles.length === 0) {
+                selectRoom.innerHTML = `<option value="">Sin habitaciones disponibles para ${tipoRequerido}</option>`;
+            }
+        }
+
+        document.getElementById('ci-reserva').addEventListener('change', populateAutoRoomsSelect);
+
+        function handleCheckIn(event) {
+            event.preventDefault();
+
+            const reservaSelect = document.getElementById('ci-reserva');
+            const reservaId = reservaSelect.value;
+            const huespedNombre = reservaSelect.options[reservaSelect.selectedIndex].getAttribute('data-huesped');
+            const numHabitacion = parseInt(document.getElementById('ci-habitacion-destino').value);
+            const docIdentidad = document.getElementById('ci-doc-num').value;
+            const tarjeta = document.getElementById('ci-tarjeta').value;
+            const empleado = document.getElementById('ci-empleado').value;
+
+            if (!numHabitacion) {
+                showToast('No hay habitación disponible para esta reserva', 'error');
+                return;
+            }
+
+            // 1. Domain Logic: Change Room Status to OCUPADA (Rule R4)
+            const roomObj = rooms.find(r => r.number === numHabitacion);
+            if (roomObj) roomObj.status = 'OCUPADA';
+
+            // 2. Instantiate new Stay Aggregate
+            const estanciaId = "EST-" + Math.floor(800 + Math.random() * 100);
+            const nuevaEstancia = {
+                id: estanciaId,
+                reservaId: reservaId,
+                huesped: huespedNombre,
+                habitacionNum: numHabitacion,
+                docIdentidad: docIdentidad,
+                garantia: tarjeta,
+                fechaIn: new Date().toLocaleString('es-MX')
+            };
+            stays.push(nuevaEstancia);
+
+            // 3. Emit Domain Events
+            emitDomainEvent("CheckInRealizadoEvent", {
+                estanciaId: estanciaId,
+                reservaId: reservaId,
+                huesped: huespedNombre,
+                habitacionAsignada: numHabitacion,
+                empleadoAuditor: empleado,
+                reglaR3Validada: true
+            });
+
+            emitDomainEvent("CuentaAbiertaEvent", {
+                cuentaId: "CTA-" + estanciaId,
+                estanciaId: estanciaId,
+                saldoInicial: 0.00,
+                moneda: "MXN"
+            });
+
+            // 4. Update UI
+            updateKPIs();
+            populateActiveStaysSelect();
+            showToast(`Check-In exitoso. Estancia ${estanciaId} creada en Habitation ${numHabitacion}`, 'success');
+
+            // Reset Form & Switch View
+            document.getElementById('checkin-form').reset();
+            populateAutoRoomsSelect();
+        }
+
+        /* === CASO DE USO 4: CAMBIO DE HABITACION LOGIC === */
+        function populateActiveStaysSelect() {
+            const select = document.getElementById('ch-estancia');
+            select.innerHTML = '<option value="">-- Seleccionar Estancia En Cursado --</option>' +
+                stays.map(s => `
+                    <option value="${s.id}">Estancia ${s.id} - ${s.huesped} (Hab. Actual: ${s.habitacionNum})</option>
+                `).join('');
+        }
+
+        function updateOrigenDetails() {
+            const estanciaId = document.getElementById('ch-estancia').value;
+            const estancia = stays.find(s => s.id === estanciaId);
+
+            if (!estancia) {
+                document.getElementById('origen-num').textContent = "N/A";
+                document.getElementById('origen-tipo').textContent = "Tipo: -";
+                document.getElementById('origen-huesped').textContent = "Huésped: -";
+                document.getElementById('ch-destino-num').innerHTML = "";
+                return;
+            }
+
+            const habOrigen = rooms.find(r => r.number === estancia.habitacionNum);
+            
+            document.getElementById('origen-num').textContent = `Habitación ${estancia.habitacionNum}`;
+            document.getElementById('origen-tipo').textContent = `Tipo: ${habOrigen ? habOrigen.type : 'N/A'}`;
+            document.getElementById('origen-huesped').textContent = `Huésped: ${estancia.huesped}`;
+
+            // Populate available destination rooms
+            const disponibles = rooms.filter(r => r.status === 'DISPONIBLE' && r.number !== estancia.habitacionNum);
+            document.getElementById('ch-destino-num').innerHTML = disponibles.map(r => `
+                <option value="${r.number}">Habitación ${r.number} (${r.type} - Piso ${r.floor})</option>
+            `).join('');
+        }
+
+        function handleCambioHabitacion(event) {
+            event.preventDefault();
+
+            const estanciaId = document.getElementById('ch-estancia').value;
+            const destHabNum = parseInt(document.getElementById('ch-destino-num').value);
+            const motivo = document.getElementById('ch-motivo').value;
+            const empleado = document.getElementById('ch-empleado').value;
+
+            const estancia = stays.find(s => s.id === estanciaId);
+            if (!estancia || !destHabNum) {
+                showToast('Selección inválida para cambio de habitación', 'error');
+                return;
+            }
+
+            const origHabNum = estancia.habitacionNum;
+
+            // 1. Transition Origen Room to SUCIA
+            const habOrigenObj = rooms.find(r => r.number === origHabNum);
+            if (habOrigenObj) habOrigenObj.status = 'SUCIA';
+
+            // 2. Transition Destino Room to OCUPADA
+            const habDestinoObj = rooms.find(r => r.number === destHabNum);
+            if (habDestinoObj) habDestinoObj.status = 'OCUPADA';
+
+            // 3. Update Stay Aggregate
+            estancia.habitacionNum = destHabNum;
+
+            // 4. Emit Domain Event (Rule R9 & Sequence Diagram 2)
+            emitDomainEvent("CambioHabitacionRegistradoEvent", {
+                estanciaId: estanciaId,
+                habitacionOrigen: origHabNum,
+                habitacionDestino: destHabNum,
+                motivo: motivo,
+                empleadoAuditor: empleado,
+                origenEstadoNuevo: "SUCIA",
+                destinoEstadoNuevo: "OCUPADA"
+            });
+
+            // 5. Update UI
+            updateKPIs();
+            populateActiveStaysSelect();
+            updateOrigenDetails();
+            showToast(`Cambio registrado: Hab. ${origHabNum} (Sucia) ➔ Hab. ${destHabNum} (Ocupada)`, 'amber');
+
+            document.getElementById('cambio-form').reset();
+            updateOrigenDetails();
+        }
+
+        /* === ROOMS GRID RENDER & MODAL === */
+        let currentFilter = 'ALL';
+
+        function filterRooms(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.room-filter-btn').forEach(btn => {
+                btn.classList.remove('bg-slate-800', 'text-white');
+                btn.classList.add('bg-slate-900');
+            });
+            document.getElementById(`filter-${filter}`).classList.add('bg-slate-800', 'text-white');
+            renderRoomsGrid();
+        }
+
+        function renderRoomsGrid() {
+            const grid = document.getElementById('rooms-grid');
+            const filtered = rooms.filter(r => currentFilter === 'ALL' || r.status === currentFilter);
+
+            grid.innerHTML = filtered.map(r => {
+                let badgeBg = "bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30";
+                if (r.status === 'OCUPADA') badgeBg = "bg-sky-500/20 border-sky-500/40 text-sky-300 hover:bg-sky-500/30";
+                if (r.status === 'SUCIA') badgeBg = "bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30";
+
+                return `
+                    <div onclick="openRoomModal(${r.number})" class="p-2 rounded-lg border ${badgeBg} cursor-pointer transition-all text-center flex flex-col justify-between h-16">
+                        <span class="font-bold text-xs font-mono">${r.number}</span>
+                        <span class="text-[9px] uppercase tracking-wider font-semibold opacity-80">${r.status.substring(0, 4)}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function openRoomModal(roomNum) {
+            const r = rooms.find(room => room.number === roomNum);
+            if (!r) return;
+
+            document.getElementById('modal-room-num').textContent = r.number;
+            document.getElementById('modal-room-type').textContent = r.type;
+            document.getElementById('modal-room-floor').textContent = `Piso ${r.floor}`;
+
+            const statusEl = document.getElementById('modal-room-status');
+            statusEl.textContent = r.status;
+            statusEl.className = `font-bold px-2 py-0.5 rounded text-[10px] ${
+                r.status === 'DISPONIBLE' ? 'bg-emerald-900 text-emerald-200' :
+                r.status === 'OCUPADA' ? 'bg-sky-900 text-sky-200' : 'bg-amber-900 text-amber-200'
+            }`;
+
+            const stay = stays.find(s => s.habitacionNum === roomNum);
+            const stayContainer = document.getElementById('modal-room-stay');
+
+            if (stay) {
+                stayContainer.innerHTML = `
+                    <div><strong>Estancia:</strong> ${stay.id}</div>
+                    <div><strong>Huésped:</strong> ${stay.huesped}</div>
+                    <div><strong>Check-In:</strong> ${stay.fechaIn}</div>
+                `;
+            } else {
+                stayContainer.innerHTML = `<em>Sin estancia asignada en este momento.</em>`;
+            }
+
+            document.getElementById('room-modal').classList.remove('hidden');
+        }
+
+        function closeRoomModal() {
+            document.getElementById('room-modal').classList.add('hidden');
+        }
+
+        /* === TOAST NOTIFICATION UTILITY === */
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+
+            let colors = "bg-slate-900 border-cyan-500 text-cyan-200";
+            let icon = "fa-circle-info text-cyan-400";
+
+            if (type === 'success') {
+                colors = "bg-slate-900 border-emerald-500 text-emerald-200";
+                icon = "fa-circle-check text-emerald-400";
+            } else if (type === 'amber') {
+                colors = "bg-slate-900 border-amber-500 text-amber-200";
+                icon = "fa-right-left text-amber-400";
+            } else if (type === 'error') {
+                colors = "bg-slate-900 border-rose-500 text-rose-200";
+                icon = "fa-triangle-exclamation text-rose-400";
+            }
+
+            toast.className = `p-3 rounded-lg border shadow-xl flex items-center space-x-3 text-xs pointer-events-auto transform transition-all duration-300 translate-y-2 opacity-0 ${colors}`;
+            toast.innerHTML = `
+                <i class="fa-solid ${icon} text-base"></i>
+                <span class="flex-1 font-medium">${message}</span>
+            `;
+
+            container.appendChild(toast);
+
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            // Remove after 3.5 seconds
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        /* === WINDOW ONLOAD BOOTSTRAP === */
+        window.onload = function() {
+            initDomainData();
+        };
+    </script>
+</body>
+</html>
